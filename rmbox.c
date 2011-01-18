@@ -23,6 +23,7 @@
 
 #include "check_level.h"
 #include "background.h"
+#include "collision.h"
 #include "SDL_LoadPNG.h"
 
 /*
@@ -56,12 +57,9 @@ void x_draw_bg(void) {
 	int i, j, cx, cy, bx;
 	int x, y;
 	int len, pad, flou_pos;
-	unsigned int pixel;
 	int tmp, aff;
-	int cpx, cpy, cpwidth, cpheight;
 	SDL_Surface *tile_color;
 	SDL_Surface *tile_bomb;
-	SDL_Surface *shadow;
 	SDL_Surface *pad_bg;
 	/*
 	struct pixel_img data_del_tile[TILE_SZ * TILE_SZ];
@@ -558,12 +556,12 @@ void x_new_bac(int nbac){
 	if(bac == 5){
 		// les bac sont pleins
 		// on voit si c'est game over
-		if(is_any_placable(bac_sort[0], &grid_pos) == 1 ||
-		   is_any_placable(bac_sort[1], &grid_pos) == 1 ||
-		   is_any_placable(bac_sort[2], &grid_pos) == 1 ||
-		   is_any_placable(bac_sort[3], &grid_pos) == 1 ||
-		   is_any_placable(bac_sort[4], &grid_pos) == 1 ||
-			(cur_form->actif==1 && is_any_placable(cur_form, &grid_pos) == 1) ){
+		if(is_any_placable(bac_sort[0], grid_pos) == 1 ||
+		   is_any_placable(bac_sort[1], grid_pos) == 1 ||
+		   is_any_placable(bac_sort[2], grid_pos) == 1 ||
+		   is_any_placable(bac_sort[3], grid_pos) == 1 ||
+		   is_any_placable(bac_sort[4], grid_pos) == 1 ||
+			(cur_form->actif==1 && is_any_placable(cur_form, grid_pos) == 1) ){
 			// sinon on genere un empechement au hasard
 			do {
 				i = rand()%(9 * 9);
@@ -654,14 +652,9 @@ void x_time(int signum){
 
 int main(void){
 	SDL_Event event;
-	char base[4*4];
-	struct itimerval value;
 	int i, j;
-	int x, y;
-	int tile_x, tile_y;
 	int cur, tmp, col;
 	int nblines, nbcol;
-	char key;
 
 	// initialise l'ecran
 	if (SDL_Init(SDL_INIT_VIDEO) == -1) {
@@ -972,6 +965,9 @@ int main(void){
 						case SDLK_q:
 							SDL_Quit();
 							return 0;
+							break;
+
+						default:
 							break;
 					}
 			}

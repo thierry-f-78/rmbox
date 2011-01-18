@@ -8,4 +8,6 @@
  */
 int is_placable(int grid_pos, struct tile_desc *tile, struct coord * grid);
 
+int is_any_placable(struct tile_desc *tile, struct coord *grid);
+
 void rotate(struct tile_desc *tile);
