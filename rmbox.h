@@ -1,6 +1,6 @@
 // variables en vrac pour l'affichage X11
 Display *dpy;
-int screen; 
+//int screen; 
 Window root;
 Visual *visual;
 int depth;
@@ -39,107 +39,12 @@ int cur_us = 0;
 int start_time;
 
 // indique l'etat courant de la pause
-int pause = 0;
+int st_pause = 0;
 
 // indique si la forme de la piece deplacée
 // a changée de maniere a reclaculer le flou
 int cur_change = 0;
 
-// init tiles
-struct vimg * tile_color_b[] = {
-	&tile_color_red,
-	&tile_color_green,
-	&tile_color_yellow,
-	&tile_color_pink,
-	&tile_color_blue
-};
-struct vimg * tile_color_l[] = {
-	&tile_color_red_l,
-	&tile_color_green_l,
-	&tile_color_yellow_l,
-	&tile_color_pink_l,
-	&tile_color_blue_l
-};
-	
-// init points tiles
-struct vimg * tile_points[] = {
-	[ 1] = &tile_bg_1p,
-	[ 2] = &tile_bg_2p,
-	[ 3] = &tile_bg_3p,
-	[ 4] = &tile_bg_4p,
-	[ 5] = &tile_bg_5p,
-	[ 6] = &tile_bg_6p,
-	[ 7] = &tile_bg_7p,
-	[ 8] = &tile_bg_8p,
-	[20] = &tile_bg_20p,
-	[21] = &tile_bg_21p,
-	[22] = &tile_bg_22p,
-	[23] = &tile_bg_23p,
-	[24] = &tile_bg_24p,
-	[25] = &tile_bg_25p,
-	[26] = &tile_bg_26p,
-	[27] = &tile_bg_27p,
-	[28] = &tile_bg_28p
-};
-
-// anim d'effacement
-struct vimg * tile_del[] = {
-	&tile_delete_01_03,
-	&tile_delete_04_06,
-	&tile_delete_07_09,
-	&tile_delete_10_12,
-	&tile_delete_13_15
-};
-
-// anim bombe
-struct vimg * tile_bomb_l[] = {
-	&tile_bomb_0_l,
-	&tile_bomb_1_l,
-	&tile_bomb_2_l,
-	&tile_bomb_3_l,
-	&tile_bomb_4_l
-};
-struct vimg * tile_bomb_b[] = {
-	&tile_bomb_0_b,
-	&tile_bomb_1_b,
-	&tile_bomb_2_b,
-	&tile_bomb_3_b,
-	&tile_bomb_4_b
-};
-	
-// init background
-struct vimg * pad_bg[] = {
-	[ 1] = &pad_bg_01,
-	[ 2] = &pad_bg_02,
-	[ 3] = &pad_bg_03,
-	[ 4] = &pad_bg_04,
-	[ 5] = &pad_bg_05,
-	[ 6] = &pad_bg_06,
-	[ 7] = &pad_bg_07,
-	[ 8] = &pad_bg_08,
-	[ 9] = &pad_bg_09,
-	[10] = &pad_bg_10,
-	[11] = &pad_bg_11,
-	[12] = &pad_bg_12,
-	[13] = &pad_bg_13
-};
-	
-// init chiffres
-struct vimg * tile_bg[7];
-struct vimg * chif[] = {
-	&c_0,
-	&c_1,
-	&c_2,
-	&c_3,
-	&c_4,
-	&c_5,
-	&c_6,
-	&c_7,
-	&c_8,
-	&c_9,
-	&c__
-};
-	
 // init bac
 struct tile_desc a[6] = {
 	[0] = {

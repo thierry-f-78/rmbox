@@ -1,16 +1,18 @@
-CFLAGS = -O2
-CFLAGS2 = $(CFLAGS) -L/usr/X11R6/lib -lX11
+CFLAGS = -Wall -g 
+#-O2
+CFLAGS2 = $(CFLAGS) -L/usr/X11R6/lib -lX11 -lpng
 CC = gcc
 
 all: rmbox
 
-clean:
-	$(MAKE) -C images clean
-	rm *.o images.h rmbox forms.h
+OBJS = rmbox.o flou.o collision.o check_level.o \
+       background.o SDL_LoadPNG.o
 
-rmbox: images_obj rmbox.o flou.o sprites.o collision.o
-	$(CC) -o rmbox $(CFLAGS2) images/*.o rmbox.o flou.o sprites.o \
-	                          collision.o
+clean:
+	rm *.o rmbox forms.h
+
+rmbox: $(OBJS)
+	$(CC) -o rmbox $(CFLAGS2) $(OBJS) -lSDL
 
 rmbox.o: rmbox.c forms.h rmbox.h images.h
 	$(CC) -c -o rmbox.o $(CFLAGS) rmbox.c
@@ -18,8 +20,3 @@ rmbox.o: rmbox.c forms.h rmbox.h images.h
 forms.h: forms.dat forms.sh
 	./forms.sh
 
-images_obj:
-	$(MAKE) -C images
-
-images.h: $(shell ls images/*.c)
-	./images.h.sh

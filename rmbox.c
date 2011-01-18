@@ -3,20 +3,54 @@
 #include <errno.h>
 #include <signal.h>
 #include <string.h>
+#include <unistd.h>
+
+#include <time.h>
 #include <sys/time.h>
+
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 #include <X11/Xutil.h>
+
+#include <SDL/SDL.h>
 
 #include "images.h"
 #include "structs.h"
 #include "forms.h"
 #include "rmbox.h"
 #include "flou.h"
-#include "sprites.h"
 #include "collision.h"
 
-extern int errno;
+#include "check_level.h"
+#include "background.h"
+#include "SDL_LoadPNG.h"
+
+/*
+struct area {
+	int x1;
+	int y1;
+	int x2;
+	int y2;
+};
+*/
+
+// time
+struct timeval current_time = {0, 0};
+struct timeval last_valid_time;
+struct timeval real_time;
+
+SDL_Surface *background;
+SDL_Surface *screen;
+SDL_Surface *chif[11];
+SDL_Surface *tile_bomb_b[5];
+SDL_Surface *tile_bomb_l[5];
+SDL_Surface *tile_del[5];
+SDL_Surface *tile_delload[5];
+SDL_Surface *tile_color_b[5];
+SDL_Surface *tile_color_l[5];
+SDL_Surface *smiley;
+SDL_Surface *img_pause;
+//const struct area pad = {247, 15, 624, 392};
 
 void x_draw_bg(void) {
 	int i, j, cx, cy, bx;
@@ -25,15 +59,18 @@ void x_draw_bg(void) {
 	unsigned int pixel;
 	int tmp, aff;
 	int cpx, cpy, cpwidth, cpheight;
-	struct vimg * tile_color;
-	struct vimg * tile_bomb;
-	struct vimg * shadow;
+	SDL_Surface *tile_color;
+	SDL_Surface *tile_bomb;
+	SDL_Surface *shadow;
+	SDL_Surface *pad_bg;
+	/*
 	struct pixel_img data_del_tile[TILE_SZ * TILE_SZ];
 	struct vimg del_tile = {
 		.height = TILE_SZ,
 		.width = TILE_SZ,
 		.pixel_data = data_del_tile
 	};
+	*/
 	// sert a calculer le channel alpha a appliquer pour les ombres
 	static struct pixel_img data_shd[((4*TILE_SZ)+20)][((4*TILE_SZ)+20)];
 	static struct vimg shd = {
@@ -41,16 +78,11 @@ void x_draw_bg(void) {
 		.width = (4*TILE_SZ)+20,
 		.pixel_data = (struct pixel_img *)data_shd
 	};
-
-	// lock
-	if(drawing == 1){
-		return;
-	}
-	drawing=1;
+	SDL_Rect blitrect = {0, 0, 0, 0};
+	SDL_Rect blitsrc  = {0, 0, 0, 0};
 
 	// affiche le fond
-	put_image(&affx, &background, 0, 0, 0, 0,
-	          background.width, background.height);
+	SDL_BlitSurface(background, NULL, screen, NULL);
 
 	// affiche le score
 	cx = pos_score.x1;
@@ -65,16 +97,18 @@ void x_draw_bg(void) {
 			len = 0;
 			aff = tmp / i;
 			tmp -= aff * i;
-			put_image(&affx, chif[aff], cx, cy, 0, 0,
-			          chif[aff]->width, chif[aff]->height);
+			blitrect.x = cx;
+			blitrect.y = cy;
+			SDL_BlitSurface(chif[aff], NULL, screen, &blitrect);
 			cx += CHIF_LEN;
 			j = 0;
 		}
 		i /= 10;
 	}
 	if(len == 1){
-		put_image(&affx, chif[0], cx, cy, 0, 0,
-		          chif[0]->width, chif[0]->height);
+		blitrect.x = cx;
+		blitrect.y = cy;
+		SDL_BlitSurface(chif[0], NULL, screen, &blitrect);
 	}
 
 	// affiche le level
@@ -87,8 +121,9 @@ void x_draw_bg(void) {
 		if(j == 0 || i <= tmp){
 			aff = tmp / i;
 			tmp -= aff * i;
-			put_image(&affx, chif[aff], cx, cy, 0, 0,
-			          chif[aff]->width, chif[aff]->height);
+			blitrect.x = cx;
+			blitrect.y = cy;
+			SDL_BlitSurface(chif[aff], NULL, screen, &blitrect);
 			cx += CHIF_LEN;
 			j = 0;
 		}
@@ -107,20 +142,24 @@ void x_draw_bg(void) {
 			len = 0;
 			aff = tmp / i;
 			tmp -= aff * i;
-			put_image(&affx, chif[aff], cx, cy, 0, 0,
-			          chif[aff]->width, chif[aff]->height);
+			blitrect.x = cx;
+			blitrect.y = cy;
+			SDL_BlitSurface(chif[aff], NULL, screen, &blitrect);
 			cx += CHIF_LEN;
 			j = 0;
 		}
 		i /= 10;
 	}
 	if(len == 1){
-		put_image(&affx, chif[0], cx, cy, 0, 0,
-		          chif[0]->width, chif[0]->height);
+		blitrect.x = cx;
+		blitrect.y = cy;
+		SDL_BlitSurface(chif[0], NULL, screen, &blitrect);
 		cx += CHIF_LEN;
 	}
-	put_image(&affx, chif[10], cx, cy, 0, 0,
-	          chif[10]->width, chif[10]->height);
+	blitrect.x = cx;
+	blitrect.y = cy;
+	SDL_BlitSurface(chif[10], NULL, screen, &blitrect);
+
 	cx += CHIF_LEN;
 	tmp = start_time % 60;
 	j = 1;
@@ -129,26 +168,29 @@ void x_draw_bg(void) {
 		if(j == 0 || i <= tmp){
 			aff = tmp / i;
 			tmp -= aff * i;
-			put_image(&affx, chif[aff], cx, cy, 0, 0,
-			          chif[aff]->width, chif[aff]->height);
+			blitrect.x = cx;
+			blitrect.y = cy;
+			SDL_BlitSurface(chif[aff], NULL, screen, &blitrect);
 			cx += CHIF_LEN;
 			j = 0;
 		} else {
-			put_image(&affx, chif[0], cx, cy, 0, 0,
-			          chif[0]->width, chif[0]->height);
+			blitrect.x = cx;
+			blitrect.y = cy;
+			SDL_BlitSurface(chif[0], NULL, screen, &blitrect);
 			cx += CHIF_LEN;
 		}
 		i /= 10;
 	}
-	
+
 	// genere la grille
-	put_image(&affx, pad_bg[level],
-	          247, 15,
-	          0, 0,
-	          pad_bg[level]->width, pad_bg[level]->height);
+	blitrect.x = 247;
+	blitrect.y = 15;
+	pad_bg = get_background(level);
+	SDL_BlitSurface(pad_bg, NULL, screen, &blitrect);
+
 	// pause
 	// si, l'on n'est pas en pause
-	if(pause == 0){
+	if(st_pause == 0){
 
 		i = 0;
 		while(i < 9 * 9){
@@ -158,12 +200,12 @@ void x_draw_bg(void) {
 
 						if(grid_pos[i].tmout <= TAFFD && 
 						   grid_pos[i].tmout >= TAFFD-ONIMG){
-							tile_color = tile_del[4];
+							tile_color = tile_del[0];
 							tmp = 255;
 						} else
 						if(grid_pos[i].tmout <= TAFFD-ONIMG-1 &&
 						   grid_pos[i].tmout >= TAFFD-(ONIMG*2)){
-							tile_color = tile_del[3];
+							tile_color = tile_del[1];
 							tmp = 204;
 						} else
 						if(grid_pos[i].tmout <= TAFFD-(ONIMG*2)-1 &&
@@ -173,38 +215,32 @@ void x_draw_bg(void) {
 						} else
 						if(grid_pos[i].tmout <= TAFFD-(ONIMG*3)-1 &&
 						   grid_pos[i].tmout >= TAFFD-(ONIMG*4)){
-							tile_color = tile_del[1];
+							tile_color = tile_del[3];
 							tmp = 102;
 						} else
 						if(grid_pos[i].tmout <= TAFFD-(ONIMG*4)-1 &&
 						   grid_pos[i].tmout >= TAFFD-(ONIMG*5)){
-							tile_color = tile_del[0];
+							tile_color = tile_del[4];
 							tmp = 51;
 						} else {
 							goto passe_delete;
 						}
-	
-						// rend le tile transparent
-						set_alpha(tile_color_b[grid_pos[i].color],
-						          &del_tile, (unsigned char)tmp);
-	
+
 						// afiche le tile
-						put_image_alpha(&affx, &del_tile,
-						                grid_pos[i].x, grid_pos[i].y,
-						                0, 0,
-					 	                del_tile.width,
-						                del_tile.height);
-	
+						/*
+						blitrect.x = grid_pos[i].x;
+						blitrect.y = grid_pos[i].y;
+						SDL_BlitSurface(del_tile, NULL, screen, &blitrect);
+						*/
 						// affiche l'animation
-						put_image_alpha(&affx, tile_color, 
-						                grid_pos[i].x, grid_pos[i].y,
-						                0, 0,
-						                tile_color->width,
-						                tile_color->height);
-				
-						passe_delete:
+						blitrect.x = grid_pos[i].x;
+						blitrect.y = grid_pos[i].y;
+						SDL_BlitSurface(tile_color, NULL, screen, &blitrect);
+
+						passe_delete: ;
 						// affiche le score e le faisant
 						// disparaitre progressivement
+/*
 						set_alpha(tile_points[grid_pos[i].points], &del_tile,
 						          255 * grid_pos[i].tmout / TAFFD );
 						put_image_alpha(&affx, &del_tile, 
@@ -212,32 +248,28 @@ void x_draw_bg(void) {
 						                0, 0,
 						                del_tile.width,
 						                del_tile.height);
+*/							
 					}
 					break;
 	
 				case 2:
-					put_image(&affx, &tile_unbreak,
-					          grid_pos[i].x, grid_pos[i].y,
-					          0, 0,
-				 	          tile_unbreak.width, tile_unbreak.height);
+					blitrect.x = grid_pos[i].x;
+					blitrect.y = grid_pos[i].y;
+					SDL_BlitSurface(tile_unbreak, NULL, screen, &blitrect);
 					break;
 	
 				case G_BOMB:
 					// select tile
-					put_image(&affx, tile_bomb_b[cur_us/200000],
-					          grid_pos[i].x, grid_pos[i].y,
-					          0, 0,
-				 	          tile_bomb_b[cur_us/200000]->width,
-					          tile_bomb_b[cur_us/200000]->height);
+					blitrect.x = grid_pos[i].x;
+					blitrect.y = grid_pos[i].y;
+					SDL_BlitSurface(tile_bomb_b[cur_us/200000], NULL, screen, &blitrect);
 					break;
 
 				case G_BLOCK:
 					// select tile
-					put_image(&affx, tile_color_b[grid_pos[i].color],
-					          grid_pos[i].x, grid_pos[i].y,
-					          0, 0,
-				 	          tile_color_b[grid_pos[i].color]->width,
-					          tile_color_b[grid_pos[i].color]->height);
+					blitrect.x = grid_pos[i].x;
+					blitrect.y = grid_pos[i].y;
+					SDL_BlitSurface(tile_color_b[grid_pos[i].color], NULL, screen, &blitrect);
 					break;
 			}
 			i++;
@@ -312,13 +344,14 @@ void x_draw_bg(void) {
 			while(i < 4 * 4){
 			
 				if(bac_sort[j]->desc[i] == 1){
-					put_image(&affx, tile_color, cx, cy, 0, 0,
-					          tile_color->width, tile_color->height);
+					blitrect.x = cx;
+					blitrect.y = cy;
+					SDL_BlitSurface(tile_color, NULL, screen, &blitrect);
 				} else
 				if(bac_sort[j]->desc[i] == 2){
-					put_image(&affx, tile_bomb_l[cur_us/200000], cx, cy, 0, 0,
-					          tile_bomb_l[cur_us/200000]->width,
-					          tile_bomb_l[cur_us/200000]->height);
+					blitrect.x = cx;
+					blitrect.y = cy;
+					SDL_BlitSurface(tile_bomb_l[cur_us/200000], NULL, screen, &blitrect);
 				}
 				if(i % 4 == 3){
 					cx = bx;
@@ -330,16 +363,16 @@ void x_draw_bg(void) {
 			}
 			j++;
 		}
+	}
 
 	// dessine en pause
-	} else {
+	else {
 		// contenu du bac
 		j = 0;
 		while(j < 5){
-			put_image_alpha(&affx, &smiley,
-			                bac_pos[j].x1, bac_pos[j].y1,
-			                0, 0,
-			                smiley.width, smiley.height);
+			blitrect.x = bac_pos[j].x1;
+			blitrect.y = bac_pos[j].y1;
+			SDL_BlitSurface(smiley, NULL, screen, &blitrect);
 			j++;
 		}
 
@@ -350,11 +383,11 @@ void x_draw_bg(void) {
 				tile_color = NULL;
 				if(pause_pos[i].tmout <= TAFFD && 
 				   pause_pos[i].tmout >= TAFFD-ONIMG){
-					tile_color = tile_del[4];
+					tile_color = tile_del[0];
 				} else
 				if(pause_pos[i].tmout <= TAFFD-ONIMG-1 &&
 				   pause_pos[i].tmout >= TAFFD-(ONIMG*2)){
-					tile_color = tile_del[3];
+					tile_color = tile_del[1];
 				} else
 				if(pause_pos[i].tmout <= TAFFD-(ONIMG*2)-1 &&
 				   pause_pos[i].tmout >= TAFFD-(ONIMG*3)){
@@ -362,39 +395,37 @@ void x_draw_bg(void) {
 				} else
 				if(pause_pos[i].tmout <= TAFFD-(ONIMG*3)-1 &&
 				   pause_pos[i].tmout >= TAFFD-(ONIMG*4)){
-					tile_color = tile_del[1];
+					tile_color = tile_del[3];
 				} else
 				if(pause_pos[i].tmout <= TAFFD-(ONIMG*4)-1 &&
 				   pause_pos[i].tmout >= TAFFD-(ONIMG*5)){
-					tile_color = tile_del[0];
+					tile_color = tile_del[4];
 				}
 				if(tile_color != NULL){
-					put_image_alpha(&affx, tile_color, 
-					                pause_pos[i].x, pause_pos[i].y,
-					                0, 0,
-					                tile_color->width,
-					                tile_color->height);
+					blitrect.x = pause_pos[i].x;
+					blitrect.y = pause_pos[i].y;
+					SDL_BlitSurface(tile_color, NULL, screen, &blitrect);
 				}
 			}
 			i++;
 		}
 
 		// pause explication
-		put_image_alpha(&affx, &img_pause,
-		                pos_pause.x1, pos_pause.y1,
-		                0, 0,
-		                img_pause.width, img_pause.height);
+		blitrect.x = pos_pause.x1;
+		blitrect.y = pos_pause.y1;
+		SDL_BlitSurface(img_pause, NULL, screen, &blitrect);
 	}
 	
 	// dessine le timer
 	// calcul du % a afficher
-	len = ( timer_pos.x2 - timer_pos.x1 ) * c_timer / WAIT_TIME;
+	blitsrc.w = ( timer_pos.x2 - timer_pos.x1 ) * c_timer / WAIT_TIME;
+	blitsrc.h = 26;
+	blitrect.x = timer_pos.x1;
+	blitrect.y = timer_pos.y1;
+	SDL_BlitSurface(timer, &blitsrc, screen, &blitrect);
 
-	// affichage du remplissage
-	put_image(&affx, &timer, timer_pos.x1, timer_pos.y1, 0, 0,
-	          len, timer.height);
+	if(st_pause == 0){
 
-	if(pause == 0 ){
 		// dessine le curseur
 		if(cur_form->actif != 0){
 			if(cur_x >= docking.x1 && cur_x <= docking.x2 &&
@@ -413,7 +444,7 @@ void x_draw_bg(void) {
 			shd.width = ( pad * 4 ) + 20;
 			shd.height = ( pad * 4 ) + 20;
 			if(i != shd.width)cur_change = 1;
-	
+/*
 			// ombre
 			// si il y a eu chagement (rotation redimensionnement)
 			// on recalcule l'ombre
@@ -467,7 +498,7 @@ void x_draw_bg(void) {
 			cx = cur_x - (cur_form->mouse_x * pad) - (pad / 2);
 			cy = cur_y - (cur_form->mouse_y * pad) - (pad / 2);
 			put_image_alpha(&affx, &shd, cx, cy, 0, 0, shd.width, shd.height);
-	
+*/	
 			// forme elle meme
 			cx = cur_x - (cur_form->mouse_x * pad) - (pad / 2);
 			cy = cur_y - (cur_form->mouse_y * pad) - (pad / 2);
@@ -475,12 +506,14 @@ void x_draw_bg(void) {
 			i = 0;
 			while(i < 4 * 4){	
 				if(cur_form->desc[i] == 1){
-					put_image(&affx, tile_color, cx, cy, 0, 0,
-					          tile_color->width, tile_color->height);
+					blitrect.x = cx;
+					blitrect.y = cy;
+					SDL_BlitSurface(tile_color, NULL, screen, &blitrect);
 				} else
 				if(cur_form->desc[i] == 2){
-					put_image(&affx, tile_bomb, cx, cy, 0, 0,
-					          tile_bomb->width, tile_bomb->height);
+					blitrect.x = cx;
+					blitrect.y = cy;
+					SDL_BlitSurface(tile_bomb, NULL, screen, &blitrect);
 				}
 				if(i % 4 == 3){
 					cx = bx;
@@ -493,13 +526,8 @@ void x_draw_bg(void) {
 		}
 	}
 
-	// affiche a l'ecran
-	XPutImage(dpy, win, gc, xbuf, 0, 0, 0, 0,
-	          xbuf->width, xbuf->height);
-	XFlush(dpy);
-
-	// unlock
-	drawing = 0;
+	// display datas
+	SDL_Flip(screen);
 }
 
 // echange le contenu actif de la souris avec celui du bac
@@ -542,7 +570,7 @@ void x_new_bac(int nbac){
 			} while(grid_pos[i].type != G_EMPTY);
 			grid_pos[i].type = G_UNBREAK;
 		} else {
-			XCloseDisplay(dpy);
+			SDL_Quit();
 			exit(0);
 		}
 		return;
@@ -578,7 +606,7 @@ void x_new_bac(int nbac){
 void x_time(int signum){
 	int i;
 
-	if(pause == 0){
+	if(st_pause == 0){
 		// timer
 		c_timer += TIMER_IT;
 		if(c_timer >= WAIT_TIME){
@@ -621,49 +649,11 @@ void x_time(int signum){
 	}
 
 	// changement de level
-	if(points >= 100 && points < 199){
-		level = 2;
-	} else
-	if(points >= 200 && points < 299){
-		level = 2;
-	} else
-	if(points >= 300 && points < 399){
-		level = 3;
-	} else
-	if(points >= 400 && points < 499){
-		level = 4;
-	} else
-	if(points >= 500 && points < 599){
-		level = 5;
-	} else
-	if(points >= 600 && points < 699){
-		level = 6;
-	} else
-	if(points >= 700 && points < 799){
-		level = 7;
-	} else
-	if(points >= 800 && points < 899){
-		level = 8;
-	} else
-	if(points >= 900 && points < 999){
-		level = 9;
-	} else
-	if(points >= 1000 && points < 1099){
-		level = 10;
-	} else
-	if(points >= 1100 && points < 1199){
-		level = 11;
-	} else
-	if(points >= 1200 && points < 999999999){
-		level = 12;
-	}
-
-	// redessine l'ecran
-	x_draw_bg();
+	level = check_level(points);
 }
 
 int main(void){
-	XEvent report;
+	SDL_Event event;
 	char base[4*4];
 	struct itimerval value;
 	int i, j;
@@ -674,331 +664,320 @@ int main(void){
 	char key;
 
 	// initialise l'ecran
-	XSetWindowAttributes xswa;
-	XGCValues gcvalues;
-
-	if((dpy=XOpenDisplay(NULL))==NULL) {
-		fprintf(stderr, "x display: can not connect "
-		"to server %s\n",XDisplayName(NULL));
-		exit(1);
-	}
-	
-	// Initialisation des variables standards
-	screen = DefaultScreen(dpy);
-	root = DefaultRootWindow(dpy);
-	visual = DefaultVisual(dpy, screen);
-	depth = DefaultDepth(dpy,screen);
-	fg = BlackPixel(dpy, screen);
-	bg = WhitePixel(dpy, screen);
-
-	if(depth < 24){
-		fprintf(stderr, "may be run in minimun depth 24, "
-		"current depth=%d", depth); 
-		exit(1);
-	}
-	
-	gcvalues.foreground =  fg;
-	gcvalues.background =  bg;
-
-	gc =  XCreateGC(dpy, RootWindow(dpy, screen),
-	               (GCForeground | GCBackground), &gcvalues);
-
-	// attributs de la fenetre.
-	// Le motif en fond
-	xswa.background_pixel = bg;
-
-	// Les événements
-	xswa.event_mask = KeyPressMask | KeyReleaseMask |
-	                  ButtonPressMask |	ButtonReleaseMask |
-							PointerMotionMask | Button1MotionMask |
-	                  Button2MotionMask | Button3MotionMask |
-	                  Button4MotionMask | Button5MotionMask |
-	                  ButtonMotionMask | ExposureMask |
-	                  VisibilityChangeMask;
-
-	// Couleur de la bordure et du background
-	xswa.background_pixel = bg;
-	xswa.border_pixel     = fg;
-	win = XCreateWindow(dpy, root,
-	                    100, 100, WIDTH, HEIGHT, 3,
-	                    depth, InputOutput, visual,
-	                    CWEventMask|CWBorderPixel|CWBackPixel,
-	                    &xswa);
-
-	// On lui donne un titre
-	XChangeProperty(dpy, win, XA_WM_NAME, XA_STRING, 8,
-	                PropModeReplace,
-	                TITLE, sizeof(TITLE) - 1);
-	                XMapWindow(dpy,win);
-
-	// Creation de l'image buffer local
-	xbuf = XCreateImage(dpy, visual, depth,
-	       ZPixmap, 0,
-	       (char *)&affx.pixel_data[0],
-	       affx.width,
-	       affx.height, 32, 0);
-	if(xbuf == NULL){   
-		fprintf(stderr, "Erreur XCreateImage: ${NAME}\n");
-		exit(1);
-	}
+	if (SDL_Init(SDL_INIT_VIDEO) == -1) {
+		fprintf(stderr, "Erreur lors de l'initialisation de SDL: %s\n", SDL_GetError());
+		return 1;
+	}	
+	screen = SDL_SetVideoMode(640, 480, 24, SDL_HWSURFACE | SDL_DOUBLEBUF | SDL_ANYFORMAT);
 
 	// init random
 	srand(time(NULL));
 
 	// init
 	start_time = 0;
+	aff_points = 0;
+	level = 1;
 
 	// get new bac
 	x_new_bac(5);
 
+	// load pictures
+	background      = SDL_LoadPNG("img/background.png");
+	chif[0]         = SDL_LoadPNG("img/c_0.png");
+	chif[1]         = SDL_LoadPNG("img/c_1.png");
+	chif[2]         = SDL_LoadPNG("img/c_2.png");
+	chif[3]         = SDL_LoadPNG("img/c_3.png");
+	chif[4]         = SDL_LoadPNG("img/c_4.png");
+	chif[5]         = SDL_LoadPNG("img/c_5.png");
+	chif[6]         = SDL_LoadPNG("img/c_6.png");
+	chif[7]         = SDL_LoadPNG("img/c_7.png");
+	chif[8]         = SDL_LoadPNG("img/c_8.png");
+	chif[9]         = SDL_LoadPNG("img/c_9.png");
+	chif[10]        = SDL_LoadPNG("img/c_10.png");
+	tile_unbreak    = SDL_LoadPNG("img/tile_unbreak.png");
+	tile_bomb_b[0]  = SDL_LoadPNG("img/tile_bomb_0.png");
+	tile_bomb_b[1]  = SDL_LoadPNG("img/tile_bomb_1.png");
+	tile_bomb_b[2]  = SDL_LoadPNG("img/tile_bomb_2.png");
+	tile_bomb_b[3]  = SDL_LoadPNG("img/tile_bomb_3.png");
+	tile_bomb_b[4]  = SDL_LoadPNG("img/tile_bomb_4.png");
+	tile_bomb_l[0]  = SDL_LoadPNG("img/ll_tile_bomb_0.png");
+	tile_bomb_l[1]  = SDL_LoadPNG("img/ll_tile_bomb_1.png");
+	tile_bomb_l[2]  = SDL_LoadPNG("img/ll_tile_bomb_2.png");
+	tile_bomb_l[3]  = SDL_LoadPNG("img/ll_tile_bomb_3.png");
+	tile_bomb_l[4]  = SDL_LoadPNG("img/ll_tile_bomb_4.png");
+	timer           = SDL_LoadPNG("img/timer.png");
+	tile_del[0]     = SDL_LoadPNG("img/tile_delete_01_03.png");
+	tile_del[1]     = SDL_LoadPNG("img/tile_delete_04_06.png");
+	tile_del[2]     = SDL_LoadPNG("img/tile_delete_07_09.png");
+	tile_del[3]     = SDL_LoadPNG("img/tile_delete_10_12.png");
+	tile_del[4]     = SDL_LoadPNG("img/tile_delete_13_15.png");
+	smiley          = SDL_LoadPNG("img/smiley.png");
+	img_pause       = SDL_LoadPNG("img/pause.png");
+	tile_color_l[0] = SDL_LoadPNG("img/ll_tile_color_green.png");
+	tile_color_l[1] = SDL_LoadPNG("img/ll_tile_color_red.png");
+	tile_color_l[2] = SDL_LoadPNG("img/ll_tile_color_pink.png");
+	tile_color_l[3] = SDL_LoadPNG("img/ll_tile_color_yellow.png");
+	tile_color_l[4] = SDL_LoadPNG("img/ll_tile_color_blue.png");
+	tile_color_b[0] = SDL_LoadPNG("img/tile_color_green.png");
+	tile_color_b[1] = SDL_LoadPNG("img/tile_color_red.png");
+	tile_color_b[2] = SDL_LoadPNG("img/tile_color_pink.png");
+	tile_color_b[3] = SDL_LoadPNG("img/tile_color_yellow.png");
+	tile_color_b[4] = SDL_LoadPNG("img/tile_color_blue.png");
+
 	// init timer
-	signal(SIGALRM, x_time);
-	value.it_interval.tv_sec = 0;
-	value.it_interval.tv_usec = TIMER_IT;
-	value.it_value = value.it_interval;
-	setitimer(ITIMER_REAL, &value, NULL);
+	gettimeofday(&last_valid_time, NULL);
 
 	// main program
 	while(1) {
-		XNextEvent(dpy, &report);
-		switch (report.type) {
 
-			// Le programme doit rafraichir la fenetre
-			case Expose:
+		// wait a little bit
+		usleep(10000);
 
-			// La souris a bouge
-			case MotionNotify:
-			e = (XMotionEvent *) &report;
-			cur_x = e->x;
-			cur_y = e->y;
-			break;
-
-			case ButtonPress: 
-			switch(report.xbutton.button) {
-				case Button1: 
-				// verifie si l'on est dans un bac
-				i = 0;
-				while(i < 5){
-					if(cur_x >= bac_pos[i].x1 && cur_x <= bac_pos[i].x2 &&
-					   cur_y >= bac_pos[i].y1 && cur_y <= bac_pos[i].y2 ){
-						// si le bac et la souris sont vides
-						// on rempli le bac
-						if(bac_sort[i]->actif == 0 && cur_form->actif == 0){
-							c_timer = 0;
-							x_new_bac(i);
-
-						// sinon on echange le bac avec la souris
-						} else {
-							swap_bac(i);
-							cur_change = 1;
-						}
-					}
-					i ++;
-				}
-				
-				// verifie si l'on est sur le terrain de jeu
-				if(cur_x >= pad.x1 && cur_x <= pad.x2 &&
-				   cur_y >= pad.y1 && cur_y <= pad.y2 ){
-					// depose des carrés
-					
-					// si pas de carre on passe
-					if(cur_form->actif == 0) break;
-					
-					// on recherche la position du care pointé
-					i=0;
-					while(i < 9 * 9){
-						if(cur_x >= grid_pos[i].x &&
-						   cur_x <= grid_pos[i].x + TILE_SZ &&
-						   cur_y >= grid_pos[i].y &&
-						   cur_y <= grid_pos[i].y + TILE_SZ){
-								break;
-							}
-						i++;
-					}
-					
-					// on verifie que tous les carres entrent
-					// if(is_placable(i, cur_form, &grid_pos) == 0){
-					if(is_placable(i, cur_form, grid_pos) == 0){
-						goto end_posable;
-					}
-
-					// on pose
-					// pointeur sur le premier carré
-					cur = i - cur_form->mouse_x - ( cur_form->mouse_y * 9);
-					j = 0;
-					while(j < 4*4){
-						if(cur_form->desc[j] == 1){
-							grid_pos[cur].type = G_BLOCK;
-							grid_pos[cur].color = cur_form->color;
-
-							// on ajoute des points
-							points++;
-						} else
-						if(cur_form->desc[j] == 2){
-							grid_pos[cur].type = G_BOMB;
-						}
-						// carre suivant
-						if(j % 4 == 3){
-							cur += ( 9 - 4 + 1 );
-						} else {
-							cur ++;
-						}
-						j ++;
-					}
-
-					// on efface le total des points
-					bzero(grid_del, 9 * 9 * sizeof(int));
-					bzero(grid_col, 9 * 9 * sizeof(int));
-					bzero(grid_car, 9 * 9 * sizeof(int));
-					nbcol = 0;
-					nblines = 0;
-					
-					// on verifie les lignes a eclater
-					// horizontal:
-					i = 0;
-					while(i < 9 * 9){
-						j = i;
-						tmp = 1;
-						col = 1;
-						cur = grid_pos[j].color;
-						while(j < i + 9){
-							if(grid_pos[j].color != cur) col = 0;
-							if(grid_pos[j].type != G_BLOCK &&
-							   grid_pos[j].type != G_BOMB){
-								tmp = 0;
-								break;
-							}
-							j++;
-						}
-						if(tmp == 1){
-							nblines++;
-							if(col == 1) nbcol++;
-							j = i;
-							while(j < i + 9){
-								grid_del[j] = 1;
-								if(col == 1) grid_col[j] = 1;
-								j++;
-							}
-						}
-						i += 9;
-					}
-					
-					// vertical
-					i = 0;
-					while(i < 9){
-						j = i;
-						tmp = 1;
-						col = 1;
-						cur = grid_pos[j].color;
-						while(j < i + ( 8 * 9 ) + 1){
-							if(grid_pos[j].color != cur) col = 0;
-							if(grid_pos[j].type != G_BLOCK &&
-                        grid_pos[j].type != G_BOMB){
-								tmp = 0;
-								break;
-							}
-							j += 9;
-						}
-						if(tmp == 1){
-							nblines++;
-							if(col == 1) nbcol++;
-							j = i;
-							while(j < i + ( 8 * 9 ) + 1){
-								grid_del[j] = 1;
-								if(col == 1) grid_col[j] = 1;
-								j += 9;
-							}
-						}
-						i ++;
-					}
-	
-					// si on a des lignes detruites, on additionne
-					// les points
-					if(nblines > 0){
-						// on multiplie la matrice de lignes
-						// par le nombre de lignes detruites
-						j = 0;
-						while(j < 9 * 9){
-							// on totalise les points
-							grid_del[j] = (grid_del[j] * nblines) + 
-							              (grid_col[j] * nbcol) +
-										     grid_car[j];
-							points += grid_del[j];
-
-							// on efface et on mets a jour
-							if(grid_del[j] > 0){
-								grid_pos[j].type = G_EMPTY;
-								grid_pos[j].points = grid_del[j];
-								grid_pos[j].tmout = TAFFD;
-							}
-							j++;
-						}
-					}
-					
-					// carre de 4 de la meme couleur
-
-					// on vide la souris
-					cur_form->actif = 0;
-					
-					// si aucun dock plein, on le remplit,
-					// et on remet le timer a 0
-					i = 0;
-					while(i < 5){
-						if(bac_sort[i]->actif == 1) break;
-						i++;
-					}
-					if(i == 5){
-						c_timer = 0;
-						x_new_bac(5);
-					}
-					
-					end_posable: ;
-				}
-				break;
-
-				case Button3:
-				// si une piece n'est pas sous la souris
-				// on quite
-				if(cur_form->actif == 0) break;
-
-				// fait tourner la piece
-				rotate(cur_form);
-
-				// informe du changement pour recalculer l'ombre
-				cur_change = 1;
-				break;
-			}
-			break;
-
-			/* traitement des évènements de type KeyPress */
-			case KeyPress:
-				XLookupString(&(report.xkey), &key, 1, NULL, NULL);
-
-				// printf("%02x\n", key);
-
-				switch(key){
-					case 'p':
-					case 'P':
-						if(pause == 1){
-							pause = 0;
-						} else {
-							pause = 1;
-						}
-						break;
-
-					case 0x1b: // echap
-					case 'q':
-					case 'Q':
-						XCloseDisplay(dpy);
-						exit(0);
-						break;
-				}
-				break;
-
-			/* traitement des évènements de type ConfigureNotify */
-			case ConfigureNotify:
-				break;
+		// check time
+		gettimeofday(&real_time, NULL);
+		current_time.tv_sec += real_time.tv_sec - last_valid_time.tv_sec;
+		current_time.tv_usec += real_time.tv_usec - last_valid_time.tv_usec;
+		if(current_time.tv_usec > 1000000){
+			current_time.tv_usec-=1000000;
+			current_time.tv_sec++;
 		}
+		last_valid_time.tv_sec = real_time.tv_sec;
+		last_valid_time.tv_usec = real_time.tv_usec;
+
+		while(SDL_PollEvent(&event)){
+			switch (event.type) {
+
+				// ----------------------------------------
+				//  La souris a bouge
+				// ----------------------------------------
+				case SDL_MOUSEMOTION:
+					cur_x += event.motion.xrel;
+					cur_y += event.motion.yrel;
+					break;
+
+				// ----------------------------------------
+				//  Appuie d'un bouton de souris
+				// ----------------------------------------
+				case SDL_MOUSEBUTTONDOWN: 
+
+					switch(event.button.button) {
+						case SDL_BUTTON_LEFT:
+
+							// verifie si l'on est dans un bac
+							i = 0;
+							while(i < 5){
+								if(cur_x >= bac_pos[i].x1 && cur_x <= bac_pos[i].x2 &&
+								   cur_y >= bac_pos[i].y1 && cur_y <= bac_pos[i].y2 ){
+									// si le bac et la souris sont vides
+									// on rempli le bac
+									if(bac_sort[i]->actif == 0 && cur_form->actif == 0){
+										c_timer = 0;
+										x_new_bac(i);
+
+									// sinon on echange le bac avec la souris
+									} else {
+										swap_bac(i);
+										cur_change = 1;
+									}
+								}
+								i ++;
+							}
+				
+							// verifie si l'on est sur le terrain de jeu
+							if(cur_x >= pad.x1 && cur_x <= pad.x2 &&
+							   cur_y >= pad.y1 && cur_y <= pad.y2 ){
+								// depose des carrés
+					
+								// si pas de carre on passe
+								if(cur_form->actif == 0) break;
+					
+								// on recherche la position du care pointé
+								i=0;
+								while(i < 9 * 9){
+									if(cur_x >= grid_pos[i].x &&
+									   cur_x <= grid_pos[i].x + TILE_SZ &&
+									   cur_y >= grid_pos[i].y &&
+									   cur_y <= grid_pos[i].y + TILE_SZ){
+											break;
+										}
+									i++;
+								}
+					
+								// on verifie que tous les carres entrent
+								// if(is_placable(i, cur_form, &grid_pos) == 0){
+								if(is_placable(i, cur_form, grid_pos) == 0){
+									goto end_posable;
+								}
+
+								// on pose
+								// pointeur sur le premier carré
+								cur = i - cur_form->mouse_x - ( cur_form->mouse_y * 9);
+								j = 0;
+								while(j < 4*4){
+									if(cur_form->desc[j] == 1){
+										grid_pos[cur].type = G_BLOCK;
+										grid_pos[cur].color = cur_form->color;
+
+										// on ajoute des points
+										points++;
+									} 
+									else if(cur_form->desc[j] == 2){
+										grid_pos[cur].type = G_BOMB;
+									}
+									// carre suivant
+									if(j % 4 == 3){
+										cur += ( 9 - 4 + 1 );
+									} else {
+										cur ++;
+									}
+									j ++;
+								}
+
+								// on efface le total des points
+								bzero(grid_del, 9 * 9 * sizeof(int));
+								bzero(grid_col, 9 * 9 * sizeof(int));
+								bzero(grid_car, 9 * 9 * sizeof(int));
+								nbcol = 0;
+								nblines = 0;
+					
+								// on verifie les lignes a eclater
+								// horizontal:
+								i = 0;
+								while(i < 9 * 9){
+									j = i;
+									tmp = 1;
+									col = 1;
+									cur = grid_pos[j].color;
+									while(j < i + 9){
+										if(grid_pos[j].color != cur) col = 0;
+										if(grid_pos[j].type != G_BLOCK &&
+										   grid_pos[j].type != G_BOMB){
+											tmp = 0;
+											break;
+										}
+										j++;
+									}
+									if(tmp == 1){
+										nblines++;
+										if(col == 1) nbcol++;
+										j = i;
+										while(j < i + 9){
+											grid_del[j] = 1;
+											if(col == 1) grid_col[j] = 1;
+											j++;
+										}
+									}
+									i += 9;
+								}
+					
+								// vertical
+								i = 0;
+								while(i < 9){
+									j = i;
+									tmp = 1;
+									col = 1;
+									cur = grid_pos[j].color;
+									while(j < i + ( 8 * 9 ) + 1){
+										if(grid_pos[j].color != cur) col = 0;
+										if(grid_pos[j].type != G_BLOCK &&
+			                        grid_pos[j].type != G_BOMB){
+											tmp = 0;
+											break;
+										}
+										j += 9;
+									}
+									if(tmp == 1){
+										nblines++;
+										if(col == 1) nbcol++;
+										j = i;
+										while(j < i + ( 8 * 9 ) + 1){
+											grid_del[j] = 1;
+											if(col == 1) grid_col[j] = 1;
+											j += 9;
+										}
+									}
+									i ++;
+								}
+	
+								// si on a des lignes detruites, on additionne
+								// les points
+								if(nblines > 0){
+									// on multiplie la matrice de lignes
+									// par le nombre de lignes detruites
+									j = 0;
+									while(j < 9 * 9){
+										// on totalise les points
+										grid_del[j] = (grid_del[j] * nblines) + 
+										              (grid_col[j] * nbcol) +
+													     grid_car[j];
+										points += grid_del[j];
+
+										// on efface et on mets a jour
+										if(grid_del[j] > 0){
+											grid_pos[j].type = G_EMPTY;
+											grid_pos[j].points = grid_del[j];
+											grid_pos[j].tmout = TAFFD;
+										}
+										j++;
+									}
+								}
+					
+								// carre de 4 de la meme couleur
+
+								// on vide la souris
+								cur_form->actif = 0;
+								
+								// si aucun dock plein, on le remplit,
+								// et on remet le timer a 0
+								i = 0;
+								while(i < 5){
+									if(bac_sort[i]->actif == 1) break;
+									i++;
+								}
+								if(i == 5){
+									c_timer = 0;
+									x_new_bac(5);
+								}
+					
+								end_posable: ;
+							}
+							break;
+
+						case SDL_BUTTON_RIGHT:
+							// si une piece n'est pas sous la souris
+							// on quite
+							if(cur_form->actif == 0) break;
+
+							// fait tourner la piece
+							rotate(cur_form);
+
+							// informe du changement pour recalculer l'ombre
+							cur_change = 1;
+							break;
+					}
+					break;
+
+				/* traitement des évènements de type KeyPress */
+				case SDL_KEYDOWN:
+					switch (event.key.keysym.sym) {
+						case SDLK_p:
+							if(st_pause == 1){
+								st_pause = 0;
+							} else {
+								st_pause = 1;
+							}
+							break;
+
+						case SDLK_ESCAPE:
+						case SDLK_q:
+							SDL_Quit();
+							return 0;
+							break;
+					}
+			}
+		}
+		x_time(0);
+		x_draw_bg();
 	}
 	exit(0);
 }
