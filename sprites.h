@@ -1,3 +1,12 @@
+/*
+ * Copyright 2011-2019 Thierry FOURNIER
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version
+ * 2 of the License.
+ *
+ */
 /* colle l'image dans la buffer pret a sortir
  * x, y, src_x, src_y, width et height DOIVENT
  *   etre POSITIFS, aucun controle n'est fait !
